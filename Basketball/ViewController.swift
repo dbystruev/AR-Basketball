@@ -10,10 +10,12 @@ import UIKit
 import SceneKit
 import ARKit
 
-class ViewController: UIViewController, ARSCNViewDelegate {
+class ViewController: UIViewController {
 
+    // MARK: Outlets
     @IBOutlet var sceneView: ARSCNView!
     
+    // MARK: - UIViewController Methods
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -22,54 +24,62 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         
         // Show statistics such as fps and timing information
         sceneView.showsStatistics = true
-        
-        // Create a new scene
-        let scene = SCNScene(named: "art.scnassets/ship.scn")!
-        
-        // Set the scene to the view
-        sceneView.scene = scene
     }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        
-        // Create a session configuration
         let configuration = ARWorldTrackingConfiguration()
-
-        // Run the view's session
+        configuration.planeDetection = .vertical
         sceneView.session.run(configuration)
     }
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        
-        // Pause the view's session
         sceneView.session.pause()
     }
 
-    // MARK: - ARSCNViewDelegate
-    
-/*
-    // Override to create and configure nodes for anchors added to the view's session.
-    func renderer(_ renderer: SCNSceneRenderer, nodeFor anchor: ARAnchor) -> SCNNode? {
-        let node = SCNNode()
-     
-        return node
-    }
-*/
-    
-    func session(_ session: ARSession, didFailWithError error: Error) {
-        // Present an error message to the user
-        
+    // MARK: - Custom Methods
+    func addHoop(result: ARHitTestResult) {
+        let hoop = SCNScene(named: "art.scnassets/hoop.scn")!.rootNode.clone()
+        hoop.simdTransform = result.worldTransform
+        hoop.eulerAngles.x -= .pi / 2
+        sceneView.scene.rootNode.addChildNode(hoop)
+        sceneView.scene.rootNode.enumerateChildNodes { node, _ in
+            if node.name == "Wall" {
+                node.removeFromParentNode()
+            }
+        }
     }
     
-    func sessionWasInterrupted(_ session: ARSession) {
-        // Inform the user that the session has been interrupted, for example, by presenting an overlay
+    func createWall(planeAnchor: ARPlaneAnchor) -> SCNNode {
+        let extent = planeAnchor.extent
+        let width = CGFloat(extent.x)
+        let height = CGFloat(extent.z)
+        let plane = SCNPlane(width: width, height: height)
+        plane.firstMaterial?.diffuse.contents = UIColor.red
+        let wall = SCNNode(geometry: plane)
         
+        wall.eulerAngles.x = -.pi / 2
+        wall.name = "Wall"
+        wall.opacity = 0.125
+        
+        return wall
     }
     
-    func sessionInterruptionEnded(_ session: ARSession) {
-        // Reset tracking and/or remove existing anchors if consistent tracking is required
-        
+    @IBAction func screenTapped(_ sender: UITapGestureRecognizer) {
+        let touchLocation = sender.location(in: sceneView)
+        let hitTestResult = sceneView.hitTest(touchLocation, types: .existingPlaneUsingExtent)
+        if let nearestResult = hitTestResult.first {
+            addHoop(result: nearestResult)
+        }
+    }
+}
+
+// MARK: - ARSCNViewDelegate
+extension ViewController: ARSCNViewDelegate {
+    func renderer(_ renderer: SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
+        guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
+        let wall = createWall(planeAnchor: planeAnchor)
+        node.addChildNode(wall)
     }
 }
