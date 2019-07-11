@@ -15,6 +15,17 @@ class ViewController: UIViewController {
     // MARK: Outlets
     @IBOutlet var sceneView: ARSCNView!
     
+    // MARK: - Properties
+    var isHoopPlaced = false {
+        didSet {
+            if isHoopPlaced {
+                guard let configuration = sceneView.session.configuration as? ARWorldTrackingConfiguration else { return }
+                configuration.planeDetection = []
+                sceneView.session.run(configuration)
+            }
+        }
+    }
+    
     // MARK: - UIViewController Methods
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -39,11 +50,34 @@ class ViewController: UIViewController {
     }
 
     // MARK: - Custom Methods
+    func addBall() {
+        guard let frame = sceneView.session.currentFrame else { return }
+        let ball = SCNNode(geometry: SCNSphere(radius: 0.25))
+        ball.physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(
+            node: ball,
+            options: [SCNPhysicsShape.Option.collisionMargin: 0.01]
+        ))
+        ball.geometry?.firstMaterial?.diffuse.contents = UIImage(named: "art.scnassets/Basketball texture.jpg")
+        let transform = SCNMatrix4(frame.camera.transform)
+        ball.transform = transform
+        let power = Float(10)
+        let force = SCNVector3(-transform.m31 * power, -transform.m32 * power, -transform.m33 * power)
+        ball.physicsBody?.applyForce(force, asImpulse: true)
+        sceneView.scene.rootNode.addChildNode(ball)
+    }
+    
     func addHoop(result: ARHitTestResult) {
         let hoop = SCNScene(named: "art.scnassets/hoop.scn")!.rootNode.clone()
         hoop.simdTransform = result.worldTransform
         hoop.eulerAngles.x -= .pi / 2
         sceneView.scene.rootNode.addChildNode(hoop)
+        let shape = SCNPhysicsShape(
+            node: hoop,
+            options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]
+        )
+        let body = SCNPhysicsBody(type: .static, shape: shape)
+        hoop.physicsBody = body
+        
         sceneView.scene.rootNode.enumerateChildNodes { node, _ in
             if node.name == "Wall" {
                 node.removeFromParentNode()
@@ -66,11 +100,17 @@ class ViewController: UIViewController {
         return wall
     }
     
+    // MARK: - Actions
     @IBAction func screenTapped(_ sender: UITapGestureRecognizer) {
-        let touchLocation = sender.location(in: sceneView)
-        let hitTestResult = sceneView.hitTest(touchLocation, types: .existingPlaneUsingExtent)
-        if let nearestResult = hitTestResult.first {
-            addHoop(result: nearestResult)
+        if isHoopPlaced {
+            addBall()
+        } else {
+            let touchLocation = sender.location(in: sceneView)
+            let hitTestResult = sceneView.hitTest(touchLocation, types: .existingPlaneUsingExtent)
+            if let nearestResult = hitTestResult.first {
+                addHoop(result: nearestResult)
+                isHoopPlaced = true
+            }
         }
     }
 }
